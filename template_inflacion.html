@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inflación Bolivia</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: #f3f6f4;
+  color: #111827;
+  min-height: 100vh;
+  padding: 28px 36px 48px;
+}
+h1 { font-size: 17px; font-weight: 600; color: #1a1a2e; margin-bottom: 3px; }
+.sub { font-size: 12px; color: #999; margin-bottom: 20px; }
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin-bottom: 22px;
+}
+.stat-card {
+  background: #ffffff;
+  border: 1px solid #e5efe9;
+  border-left: 4px solid #2F7D57;
+  border-radius: 10px;
+  padding: 12px 16px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+}
+.stat-label { font-size: 11px; color: #6B7280; margin-bottom: 2px; }
+.stat-val   { font-size: 22px; font-weight: 600; color: #111827; }
+.stat-mes   { font-size: 11px; color: #9CA3AF; margin-top: 2px; }
+.chart-wrap {
+  background: #ffffff;
+  border: 1px solid #e5efe9;
+  border-radius: 12px;
+  padding: 20px 20px 14px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.legend-row { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: #555; }
+.leg-item {
+  display: flex; align-items: center; gap: 6px;
+  cursor: pointer;
+  padding: 3px 8px 3px 6px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+  user-select: none;
+}
+.leg-item:hover  { background: #f0f5f2; border-color: #d1e3d9; }
+.leg-item.oculto { opacity: 0.35; text-decoration: line-through; }
+.leg-sw     { width: 26px; height: 3px; border-radius: 2px; flex-shrink: 0; display: inline-block; }
+.leg-dashed { width: 26px; height: 0; border-top: 2.5px dashed #4E79A7; flex-shrink: 0; display: inline-block; }
+/* Botón exportar PNG */
+.btn-export {
+  font-size: 12px;
+  padding: 4px 11px;
+  border: 1px solid #d1e3d9;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #2F7D57;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.btn-export:hover { background: #E8F3ED; }
+.btn-row    { display: flex; gap: 5px; flex-wrap: wrap; }
+.btn-rng {
+  font-size: 12px;
+  padding: 4px 11px;
+  border: 1px solid #d1e3d9;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #2F7D57;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-rng:hover  { background: #E8F3ED; }
+.btn-rng.active { background: #2F7D57; color: #fff; border-color: #2F7D57; }
+.canvas-box { position: relative; width: 100%; height: 420px; }
+.slider-section { padding: 10px 4px 0; }
+.slider-track-wrap {
+  position: relative;
+  height: 36px;
+  margin-bottom: 6px;
+}
+.track-bg {
+  position: absolute;
+  top: 50%; left: 0; right: 0;
+  height: 4px;
+  background: #e2e8e4;
+  border-radius: 2px;
+  transform: translateY(-50%);
+}
+.track-fill {
+  position: absolute;
+  top: 50%;
+  height: 4px;
+  background: #2F7D57;
+  border-radius: 2px;
+  transform: translateY(-50%);
+}
+.slider-track-wrap input[type=range] {
+  position: absolute;
+  width: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  height: 36px;
+  z-index: 3;
+  -webkit-appearance: none;
+}
+.thumb {
+  position: absolute;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  background: #2F7D57;
+  border: 2.5px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+  transform: translate(-50%, -50%);
+  pointer-events: all;
+  cursor: grab;
+  z-index: 4;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.thumb:active { cursor: grabbing; }
+.slider-tooltip {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%);
+  background: #1a1a2e;
+  color: #fff;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 10;
+}
+.slider-tooltip.visible { opacity: 1; }
+.slider-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%; left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #1a1a2e;
+}
+.slider-years {
+  position: relative;
+  height: 18px;
+  font-size: 11px;
+  color: #9CA3AF;
+}
+.slider-years span {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.fuente {
+  font-size: 11px;
+  color: #6B7280;
+  margin-top: 14px;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.nota-metodologica{
+  margin-top: 12px; 
+  font-size: 11px; 
+  color: #6B7280; 
+  line-height: 1.4;
+}
+</style>
+</head>
+<body>
+
+<h1>Tasa de variación del Índice de Precios al Consumidor (IPC) — Inflación Bolivia</h1>
+<p class="sub">Fuente: Instituto Nacional de Estadística (INE) &nbsp;·&nbsp; {{PRIMER_ANIO}}–{{ULTIMO_ANIO}}</p>
+
+<div class="stat-row" id="stats"></div>
+
+<div class="chart-wrap" id="panelExport">
+  <div class="top-bar">
+    <div class="legend-row">
+      <span class="leg-item" data-index="0"><span class="leg-sw" style="background:#1F3A5F;"></span>A 12 meses</span>
+      <span class="leg-item" data-index="1"><span class="leg-dashed"></span>Acumulada</span>
+      <span class="leg-item" data-index="2"><span class="leg-sw" style="background:#D6B8B8;"></span>Mensual</span>
+    </div>
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <div class="btn-row" id="btnRow">
+        <button class="btn-rng" data-y="0">Todo</button>
+        <button class="btn-rng" data-y="10">10A</button>
+        <button class="btn-rng" data-y="5">5A</button>
+        <button class="btn-rng" data-y="3">3A</button>
+        <button class="btn-rng" data-y="1">1A</button>
+      </div>
+      <button class="btn-export" id="btnExport">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 1v9M4 7l4 4 4-4"/><rect x="2" y="11" width="12" height="3" rx="1"/>
+        </svg>
+        Exportar PNG
+      </button>
+    </div>
+  </div>
+
+  <div class="canvas-box">
+    <canvas id="chart" role="img" aria-label="Gráfico de inflación Bolivia"></canvas>
+  </div>
+
+  <div class="slider-section">
+    <div class="slider-track-wrap" id="sliderWrap">
+      <div class="track-bg"></div>
+      <div class="track-fill" id="trackFill"></div>
+      <div class="slider-tooltip" id="ttMin"></div>
+      <div class="slider-tooltip" id="ttMax"></div>
+      <div class="thumb" id="thumbMin" tabindex="0" role="slider" aria-label="Inicio del período"></div>
+      <div class="thumb" id="thumbMax" tabindex="0" role="slider" aria-label="Fin del período"></div>
+    </div>
+    <div class="slider-years" id="sliderYears"></div>
+  </div>
+  <div class="nota-metodologica">
+  <strong>Nota metodológica:</strong> El IPC se expresa con año base 2016=100. La serie histórica corresponde a los datos empalmados publicado por la Unidad   de Análisis de Políticas Sociales y Económicas (UDAPE), lo que permite    mantener la comparabilidad de la información a lo largo del tiempo pese a los cambios de año base del índice. Para mayor información sobre los coeficientes de enlace  consultar los documentos metodológicos del INE.
+  </div>
+</div>
+
+<script>
+const RAW          = {{DATOS_JSON}};
+const FECHA_ASUNCION = parseLocalDate("{{FECHA_ASUNCION}}");
+
+function parseLocalDate(fechaStr) {
+  const [y, m, d] = fechaStr.split("-").map(Number); 
+  return new Date(y, m - 1, d);
+}
+
+const sIPC  = RAW.map(d => ({ x: parseLocalDate(d.fecha), y: d.ipc }));
+const s12m  = RAW.map(d => ({ x: parseLocalDate(d.fecha), y: d.doce_m }));
+const sAcum = RAW.map(d => ({ x: parseLocalDate(d.fecha), y: d.acumulada }));
+const sMen  = RAW.map(d => ({ x: parseLocalDate(d.fecha), y: d.mensual }));
+                                        
+const ALL_DATES = RAW.map(d => parseLocalDate(d.fecha));
+const N = ALL_DATES.length - 1;
+
+function fmtMes(date) {
+  if (!date) return "";
+  const s = date.toLocaleDateString("es-BO", { month: "short", year: "numeric" });
+  return s.charAt(0).toUpperCase() + s.slice(1).replace(".", "");
+}
+
+function getLastInRange(serie, s, e) {
+  let last = null;
+  for (const p of serie) {
+    if (p.y === null || p.y === undefined) continue;
+    if (s && p.x < s) continue;
+    if (e && p.x > e) continue;
+    if (!last || p.x > last.x) last = p;
+  }
+  return last;
+}
+
+function getFirstLastIPC(s, e) {
+  let first = null, last = null;
+  for (const p of sIPC) {
+    if (p.y === null) continue;
+    if (s && p.x < s) continue;
+    if (e && p.x > e) continue;
+    if (!first || p.x < first.x) first = p;
+    if (!last  || p.x > last.x)  last  = p;
+  }
+  return { first, last };
+}
+
+function tarjeta(label, punto) {
+  const val = punto ? punto.y.toFixed(2) + "%" : "—";
+  const mes = punto ? fmtMes(punto.x) : "";
+  return `<div class="stat-card">
+    <div class="stat-label">${label}</div>
+    <div class="stat-val">${val}</div>
+    ${mes ? `<div class="stat-mes">${mes}</div>` : ""}
+  </div>`;
+}
+
+function actualizarStats(s, e) {
+  const l12m  = getLastInRange(s12m,  s, e);
+  const lAcum = getLastInRange(sAcum, s, e);
+  const lMen  = getLastInRange(sMen,  s, e);
+  const { first, last } = getFirstLastIPC(s, e);
+  const varTotal = (first && last && first.y) ? ((last.y / first.y) - 1) * 100 : null;
+  const puntoRng = (varTotal !== null && last) ? { x: last.x, y: varTotal } : null;
+  const perText  = (s && e) ? fmtMes(s) + " – " + fmtMes(e) : "Todo el período";
+
+  document.getElementById("stats").innerHTML =
+    tarjeta("INFLACIÓN A 12 MESES", l12m)  +
+    tarjeta("INFLACIÓN MENSUAL",    lMen)  +
+    tarjeta("INFLACIÓN ACUMULADA",  lAcum) +
+    tarjeta("ACUMULADA EN EL RANGO", puntoRng) +
+    `<div class="stat-card">
+      <div class="stat-label">PERÍODO</div>
+      <div class="stat-val" style="font-size:15px;line-height:1.4;">${perText}</div>
+    </div>`;
+}
+
+const zonaVerde = {
+  id: "zonaVerde",
+  beforeDraw(ch) {
+    const xS = ch.scales.x, yS = ch.scales.y;
+    if (!xS || !yS) return;
+    const x0 = xS.getPixelForValue(FECHA_ASUNCION);
+    if (x0 > xS.right) return;
+    ch.ctx.save();
+    ch.ctx.fillStyle = "rgba(200,240,200,0.45)";
+    ch.ctx.fillRect(Math.max(x0, xS.left), yS.top, xS.right - Math.max(x0, xS.left), yS.bottom - yS.top);
+    ch.ctx.restore();
+  }
+};
+
+function recalcularEjeY(s, e) {
+  // Solo incluir series visibles (no ocultas por el usuario)
+  const todasSeries = [s12m, sAcum, sMen];
+  const all = todasSeries.flatMap((serie, idx) => {
+    try { if (chart.getDatasetMeta(idx).hidden) return []; } catch { /* chart aún no existe */ }
+    return serie.filter(d => {
+      if (d.y === null || d.y === undefined) return false;
+      if (s && d.x < s) return false;
+      if (e && d.x > e) return false;
+      return true;
+    }).map(d => d.y);
+  });
+  if (!all.length) return { min: undefined, max: undefined };
+  const mn = Math.min(...all), mx = Math.max(...all);
+  const pad = (mx - mn || 1) * 0.08;
+  return { min: Math.floor((mn - pad) * 10) / 10, max: Math.ceil((mx + pad) * 10) / 10 };
+}
+
+const ctx = document.getElementById("chart").getContext("2d");
+const chart = new Chart(ctx, {
+  type: "line",
+  plugins: [zonaVerde],
+  data: {
+    datasets: [
+      { label: "A 12 meses", data: s12m,  borderColor: "#1F3A5F", borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 5, tension: 0.2, spanGaps: true },
+      { label: "Acumulada",  data: sAcum, borderColor: "#4E79A7", borderDash: [5,4], borderWidth: 2,   pointRadius: 0, pointHoverRadius: 5, tension: 0.2, spanGaps: true },
+      { label: "Mensual",    data: sMen,  borderColor: "#D6B8B8", borderWidth: 1.8, pointRadius: 0, pointHoverRadius: 5, tension: 0.2, spanGaps: true }
+    ]
+  },
+  options: {
+    devicePixelRatio: 2,
+    responsive: true, maintainAspectRatio: false,
+    interaction: { mode: "index", intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          title: items => fmtMes(new Date(items[0].parsed.x)),
+          label: item  => " " + item.dataset.label + ": " + (item.parsed.y != null ? item.parsed.y.toFixed(2) + "%" : "—")
+        }
+      }
+    },
+    scales: {
+      x: {
+        type: "time",
+        time: { unit: "year", tooltipFormat: "MMM yyyy", displayFormats: { year: "yyyy", month: "MMM yyyy" } },
+        ticks: { maxTicksLimit: 12, color: "#374151" },
+        grid:  { color: "#cfe6d9" }
+      },
+      y: {
+        ticks: {
+          callback: v => Math.abs(v) >= 1000 ? (v/1000).toFixed(0) + "k%" : v.toFixed(v % 1 === 0 ? 0 : 1) + "%",
+          color: "#374151", maxTicksLimit: 8
+        },
+        grid:  { color: "#cfe6d9" },
+        title: { display: true, text: "Variación (%)", color: "#374151", font: { size: 12 } }
+      }
+    }
+  }
+});
+
+function setRange(s, e) {
+  chart.options.scales.x.min = s || undefined;
+  chart.options.scales.x.max = e || undefined;
+  const lim = recalcularEjeY(s, e);
+  chart.options.scales.y.min = lim.min;
+  chart.options.scales.y.max = lim.max;
+  const start = s || ALL_DATES[0];
+  const end   = e || ALL_DATES[N];
+  const meses =
+    (end.getFullYear() - start.getFullYear()) * 12 +
+    (end.getMonth() - start.getMonth());
+  chart.options.scales.x.time.unit =
+    meses <= 18 ? "month" :
+    meses <= 60 ? "quarter" :
+    "year";
+  chart.update();
+  actualizarStats(s, e);
+}
+
+function idxToDate(pct) {
+  return ALL_DATES[Math.max(0, Math.min(Math.round(pct * N / 100), N))];
+}
+
+function dateToIdx(date) {
+  const i = ALL_DATES.findIndex(d => d >= date);
+  return i < 0 ? 100 : Math.round(i / N * 100);
+}
+
+// ── Slider custom con mousedown/mousemove ─────────────────────
+const wrap     = document.getElementById("sliderWrap");
+const tFill    = document.getElementById("trackFill");
+const thumbMin = document.getElementById("thumbMin");
+const thumbMax = document.getElementById("thumbMax");
+const ttMin    = document.getElementById("ttMin");
+const ttMax    = document.getElementById("ttMax");
+
+// Estado interno del slider (0–100)
+let valMin = 0, valMax = 100;
+let dragging = null; // "min" | "max" | null
+
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function pctFromEvent(e) {
+  const rect = wrap.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  return clamp((clientX - rect.left) / rect.width * 100, 0, 100);
+}
+
+function applyValues(lo, hi, dispatch) {
+  valMin = lo; valMax = hi;
+
+  thumbMin.style.left = lo + "%";
+  thumbMax.style.left = hi + "%";
+  tFill.style.left    = lo + "%";
+  tFill.style.width   = (hi - lo) + "%";
+
+  const dMin = idxToDate(lo);
+  const dMax = idxToDate(hi);
+  ttMin.textContent = fmtMes(dMin);
+  ttMax.textContent = fmtMes(dMax);
+  ttMin.style.left  = lo + "%";
+  ttMax.style.left  = hi + "%";
+
+  if (dispatch) {
+    const startDate = lo === 0   ? null : dMin;
+    const endDate   = hi === 100 ? null : dMax;
+    setRange(startDate, endDate);
+    document.querySelectorAll("#btnRow .btn-rng").forEach(b => b.classList.remove("active"));
+    if (lo === 0 && hi === 100)
+      document.querySelector("#btnRow .btn-rng[data-y='0']").classList.add("active");
+  }
+}
+
+function startDrag(e, which) {
+  e.preventDefault();
+  dragging = which;
+  if (which === "min") ttMin.classList.add("visible");
+  else                 ttMax.classList.add("visible");
+}
+
+thumbMin.addEventListener("mousedown",  e => startDrag(e, "min"));
+thumbMin.addEventListener("touchstart", e => startDrag(e, "min"), { passive: false });
+thumbMax.addEventListener("mousedown",  e => startDrag(e, "max"));
+thumbMax.addEventListener("touchstart", e => startDrag(e, "max"), { passive: false });
+
+// También permite arrastrar desde el track directamente
+wrap.addEventListener("mousedown", e => {
+  if (e.target === thumbMin || e.target === thumbMax) return;
+  const pct = pctFromEvent(e);
+  // Asignar al thumb más cercano
+  const which = Math.abs(pct - valMin) <= Math.abs(pct - valMax) ? "min" : "max";
+  if (which === "min") applyValues(clamp(Math.round(pct), 0, valMax - 1), valMax, true);
+  else                 applyValues(valMin, clamp(Math.round(pct), valMin + 1, 100), true);
+  startDrag(e, which);
+});
+
+document.addEventListener("mousemove", e => {
+  if (!dragging) return;
+  const pct = Math.round(pctFromEvent(e));
+  if (dragging === "min") applyValues(clamp(pct, 0, valMax - 1), valMax, true);
+  else                    applyValues(valMin, clamp(pct, valMin + 1, 100), true);
+});
+
+document.addEventListener("touchmove", e => {
+  if (!dragging) return;
+  e.preventDefault();
+  const pct = Math.round(pctFromEvent(e));
+  if (dragging === "min") applyValues(clamp(pct, 0, valMax - 1), valMax, true);
+  else                    applyValues(valMin, clamp(pct, valMin + 1, 100), true);
+}, { passive: false });
+
+document.addEventListener("mouseup", () => {
+  if (!dragging) return;
+  ttMin.classList.remove("visible");
+  ttMax.classList.remove("visible");
+  dragging = null;
+});
+document.addEventListener("touchend", () => {
+  if (!dragging) return;
+  ttMin.classList.remove("visible");
+  ttMax.classList.remove("visible");
+  dragging = null;
+});
+
+// Teclado: flechas izquierda/derecha sobre los thumbs
+thumbMin.addEventListener("keydown", e => {
+  if (e.key === "ArrowLeft")  applyValues(clamp(valMin - 1, 0, valMax - 1), valMax, true);
+  if (e.key === "ArrowRight") applyValues(clamp(valMin + 1, 0, valMax - 1), valMax, true);
+});
+thumbMax.addEventListener("keydown", e => {
+  if (e.key === "ArrowLeft")  applyValues(valMin, clamp(valMax - 1, valMin + 1, 100), true);
+  if (e.key === "ArrowRight") applyValues(valMin, clamp(valMax + 1, valMin + 1, 100), true);
+});
+
+// Etiquetas de años bajo el track
+(function buildYearLabels() {
+  const yearsEl = document.getElementById("sliderYears");
+  const years = [];
+  let prevYr = -1;
+  ALL_DATES.forEach((d, i) => {
+    const yr = d.getFullYear();
+    if (yr !== prevYr && yr % 5 === 0) { years.push({ yr, i }); prevYr = yr; }
+  });
+  const firstYr = ALL_DATES[0].getFullYear();
+  const lastYr  = ALL_DATES[N].getFullYear();
+  if (!years.find(y => y.yr === firstYr)) years.unshift({ yr: firstYr, i: 0 });
+  if (!years.find(y => y.yr === lastYr))  years.push({ yr: lastYr, i: N });
+  yearsEl.innerHTML = years.map(({ yr, i }) => {
+    const pct = (i / N * 100).toFixed(1);
+    return `<span style="left:${pct}%;">${yr}</span>`;
+  }).join("");
+})();
+
+// Leyendas clicables: ocultar/mostrar serie y reescalar eje Y
+document.querySelectorAll(".leg-item[data-index]").forEach(item => {
+  item.addEventListener("click", () => {
+    const idx  = parseInt(item.dataset.index);
+    const meta = chart.getDatasetMeta(idx);
+    const visibles = chart.data.datasets.filter((_, i) => {
+      return !chart.getDatasetMeta(i).hidden;
+    }).length;
+    // No permitir ocultar la última serie visible
+    if (visibles === 1 && !meta.hidden) {
+      return;
+    }
+    meta.hidden = !meta.hidden;
+    item.classList.toggle("oculto", meta.hidden);
+    const xMin = chart.options.scales.x.min;
+    const xMax = chart.options.scales.x.max;
+    const lim = recalcularEjeY(
+      xMin ? new Date(xMin) : null,
+      xMax ? new Date(xMax) : null
+    );
+    chart.options.scales.y.min = lim.min;
+    chart.options.scales.y.max = lim.max;
+    chart.update();
+  });
+});
+
+// Exportar PNG
+document.getElementById("btnExport").addEventListener("click", async () => {
+  const panel = document.getElementById("panelExport");
+  const canvas = await html2canvas(panel, {
+    backgroundColor: "#ffffff",
+    scale: 2
+  });
+  const link = document.createElement("a");
+  link.download = "inflacion_bolivia.png";
+  link.href = canvas.toDataURL("image/png");
+  link.click();
+});
+
+// Botones de periodo rapido
+document.querySelectorAll("#btnRow .btn-rng").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#btnRow .btn-rng").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    const y = parseInt(btn.dataset.y);
+    let startDate = null, endDate = null;
+    if (y > 0) {
+      const lastValid = [...s12m].reverse().find(p => p.y !== null);
+      endDate   = lastValid ? new Date(lastValid.x) : new Date(ALL_DATES[N]);
+      startDate = new Date(endDate);
+      startDate.setFullYear(startDate.getFullYear() - y);
+    }
+    const lo = startDate ? dateToIdx(startDate) : 0;
+    const hi = endDate   ? dateToIdx(endDate)   : 100;
+    applyValues(lo, hi, false);
+    setRange(startDate, endDate);
+  });
+});
+
+(function init10A() {
+  const lastValid = [...s12m].reverse().find(p => p.y !== null);
+  const endDate   = lastValid ? new Date(lastValid.x) : new Date(ALL_DATES[N]);
+  const startDate = new Date(endDate);
+  startDate.setFullYear(startDate.getFullYear() - 10);
+
+  const lo = dateToIdx(startDate);
+  const hi = dateToIdx(endDate);
+
+  document.querySelectorAll("#btnRow .btn-rng").forEach(b => b.classList.remove("active"));
+  document.querySelector('#btnRow .btn-rng[data-y="10"]').classList.add("active");
+
+  applyValues(lo, hi, false);
+  setRange(startDate, endDate);
+})();
+</script>
+</body>
+</html>

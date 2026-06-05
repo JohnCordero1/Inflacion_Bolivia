@@ -1,79 +1,52 @@
 # ==============================================================================
 # GRÁFICO DE INFLACIÓN GENERAL - BOLIVIA
-# Series: Mensual (línea) | A 12 meses | Acumulada continua (3 tramos coloreados)
-# + Fondo verde claro desde nov-2025
+# Versión con template HTML separado (evita errores de locale y límite de chars)
+# ==============================================================================
+#
+# ESTRUCTURA DE ARCHIVOS necesaria en la misma carpeta que este script:
+#
+#   Inflacion Bolivia Abril.R   <- este script
+#   template_inflacion.html     <- el template HTML (sin datos)
+#
+# El script lee el template, inyecta los datos y guarda el resultado en
+# RUTA_SALIDA.
 # ==============================================================================
 
-# install.packages(c("readxl","dplyr","tidyr","plotly","lubridate","htmlwidgets"))
+# install.packages(c("readxl","dplyr","lubridate","jsonlite"))
 library(readxl)
 library(dplyr)
-library(tidyr)
-library(plotly)
 library(lubridate)
-library(htmlwidgets)
+library(jsonlite)
 
 # ==============================================================================
-# 1. CONFIGURACIÓN
+# 1. CONFIGURACIÓN — ajustá estas rutas a tu equipo
 # ==============================================================================
-
-RUTA_IPC            <- "D:/Usuario/Desktop/Inflación/IPC producto.xlsx"
-FILA_INDICE_GENERAL <- 1
-FECHA_ASUNCION      <- as.Date("2025-11-01")
-
-# ==============================================================================
-# 2. PARSER DE FECHAS
-# ==============================================================================
-
-parsear_periodo <- function(x) {
-  meses_es <- c(
-    "ene"="01","feb"="02","mar"="03","abr"="04",
-    "may"="05","jun"="06","jul"="07","ago"="08",
-    "sep"="09","sept"="09","oct"="10","nov"="11","dic"="12"
-  )
-  partes   <- strsplit(tolower(trimws(x)), "-")[[1]]
-  mes_num  <- meses_es[partes[1]]
-  if (is.na(mes_num)) stop(paste("Mes no reconocido:", partes[1]))
-  anio_num <- as.integer(partes[2])
-  if (anio_num < 100) anio_num <- 2000 + anio_num
-  as.Date(paste(anio_num, mes_num, "01", sep = "-"))
-}
+RUTA_IPC      <- "D:/Usuario/Desktop/Inflación/IPC Bolivia.xlsx"
+RUTA_TEMPLATE <- "D:/Usuario/Desktop/Inflación/Inflacion general/template_inflacion.html"
+RUTA_SALIDA   <- "D:/Usuario/Desktop/Inflación/Inflacion general/index.html"
+FECHA_ASUNCION <- as.Date("2025-11-01")
 
 # ==============================================================================
-# 3. CARGA DE DATOS
+# 2. CARGA DE DATOS
 # ==============================================================================
+ipc_raw <- read_excel(RUTA_IPC)
 
-ipc_raw    <- read_excel(RUTA_IPC)
-cols_fecha <- setdiff(names(ipc_raw), c("CODIGO", "DESCRIPCION"))
-
-fechas_convertidas <- setNames(
-  sapply(cols_fecha, parsear_periodo),
-  cols_fecha
-)
-
-ig_largo <- ipc_raw[FILA_INDICE_GENERAL, ] %>%
-  select(CODIGO, DESCRIPCION, all_of(cols_fecha)) %>%
-  pivot_longer(cols = all_of(cols_fecha), names_to = "periodo", values_to = "ipc") %>%
+ig_largo <- ipc_raw %>%
+  rename_with(tolower) %>%
+  rename(periodo = fecha, ipc = ipc) %>%
   mutate(
-    ipc     = as.numeric(ipc),
-    periodo = as.Date(fechas_convertidas[periodo])
+    periodo = as.Date(periodo),
+    ipc     = as.numeric(ipc)
   ) %>%
   arrange(periodo)
 
 # ==============================================================================
-# 4. CÁLCULO DE INDICADORES
+# 3. CÁLCULO DE INDICADORES
 # ==============================================================================
-
-# Dic de cada año (base acumulada anual)
 dic_por_anio <- ig_largo %>%
   filter(month(periodo) == 12) %>%
   mutate(anio = year(periodo)) %>%
   select(anio, ipc_dic = ipc)
-
-ipc_dic2024 <- dic_por_anio %>% filter(anio == 2024) %>% pull(ipc_dic)
-ipc_oct2025 <- ig_largo %>% filter(periodo == as.Date("2025-10-01")) %>% pull(ipc)
-
-if (length(ipc_dic2024) == 0) stop("No se encontró IPC dic-2024.")
-if (length(ipc_oct2025) == 0) stop("No se encontró IPC oct-2025.")
 
 ig_ind <- ig_largo %>%
   arrange(periodo) %>%
@@ -84,156 +57,55 @@ ig_ind <- ig_largo %>%
   ) %>%
   mutate(
     ipc_dic_ant = ifelse(is.na(ipc_dic_ant), ipc, ipc_dic_ant),
-    
-    # Mensual
-    inf_mensual = (ipc / lag(ipc, 1) - 1) * 100,
-    
-    # 12 meses
-    inf_12m = (ipc / lag(ipc, 12) - 1) * 100,
-    
-    # Acumulada estándar (enero - mes actual)
-    inf_acum = (ipc / ipc_dic_ant - 1) * 100
+    inf_mensual = (ipc / lag(ipc, 1)  - 1) * 100,
+    inf_12m     = (ipc / lag(ipc, 12) - 1) * 100,
+    inf_acum    = (ipc / ipc_dic_ant  - 1) * 100
   )
 
-#Extraer último dato
 ultimo      <- ig_ind %>% filter(!is.na(inf_12m)) %>% tail(1)
-primer_dato <- min(ig_ind$periodo)
 ultimo_dato <- max(ig_ind$periodo)
+primer_dato <- min(ig_ind$periodo)
 
 # ==============================================================================
-# 5. GRÁFICO
+# 4. SERIALIZAR A JSON
 # ==============================================================================
-
-fig <- plot_ly()
-
-# Fondo verde claro: gestión nueva (nov-2025 en adelante)
-fig <- fig %>%
-  layout(
-    shapes = list(
-      list(
-        type      = "rect",
-        xref      = "x", yref = "paper",
-        x0        = as.numeric(FECHA_ASUNCION) * 86400000,
-        x1        = as.numeric(ultimo_dato + 30) * 86400000,
-        y0        = 0, y1 = 1,
-        fillcolor = "rgba(200, 240, 200, 0.6)",
-        line      = list(width = 0),
-        layer     = "below"
-      )
-    )
-  )
-
-# ---- Inflación Acumulada  ----
-fig <- fig %>%
-  add_trace(
-    data          = ig_ind %>% filter(!is.na(inf_acum)),
-    x             = ~periodo, y = ~inf_acum,
-    type          = "scatter", mode = "lines",
-    line          = list(color = "#4E79A7", width = 2.5, dash = "dot"),
-    name          = "Acumulada (enero–mes actual)",
-    hovertemplate = "Acumulada: <b>%{y:.2f}%</b><br>%{x|%b %Y}<extra></extra>"
-  )
-
-# ---- Inflación a 12 meses ----
-fig <- fig %>%
-  add_trace(
-    data          = ig_ind %>% filter(!is.na(inf_12m)),
-    x             = ~periodo, y = ~inf_12m,
-    type          = "scatter", mode = "lines",
-    line          = list(color = "#1F3A5F", width = 2.5),
-    name          = "A 12 meses",
-    hovertemplate = "12 meses: <b>%{y:.2f}%</b><br>%{x|%b %Y}<extra></extra>"
-  )
-
-# ---- Inflación mensual ----
-fig <- fig %>%
-  add_trace(
-    data          = ig_ind %>% filter(!is.na(inf_mensual)),
-    x             = ~periodo, y = ~inf_mensual,
-    type          = "scatter", mode = "lines",
-    line          = list(color = "#D6B8B8", width = 2),
-    name          = "Mensual",
-    hovertemplate = "Mensual: <b>%{y:.2f}%</b><br>%{x|%b %Y}<extra></extra>"
-  )
+datos_json <- ig_ind %>%
+  mutate(
+    fecha     = format(periodo, "%Y-%m-%d"),
+    ipc       = round(ipc, 4),
+    mensual   = round(inf_mensual, 4),
+    doce_m    = round(inf_12m, 4),
+    acumulada = round(inf_acum, 4)
+  ) %>%
+  select(fecha, ipc, mensual, doce_m, acumulada) %>%
+  toJSON(na = "null", dataframe = "rows")
 
 # ==============================================================================
-# 6. LAYOUT
+# 5. PREPARAR VALORES PARA LOS PLACEHOLDERS
 # ==============================================================================
-
-fig <- fig %>%
-  layout(
-    title = list(
-      text = "<b>Tasa de variación del Indice de Precios al Consumidor (IPC) - Inflación</b>",
-      font = list(size = 20, color = "#1a1a2e"),
-      x    = 0.03
-    ),
-    
-    xaxis = list(
-      title      = "",
-      showgrid   = TRUE,
-      gridcolor  = "#EEEEEE",
-      tickformat = "%b %Y",
-      
-      rangeselector = list(
-        buttons = list(
-          list(count = 1, label = "1A", step = "year", stepmode = "backward"),
-          list(count = 3, label = "3A", step = "year", stepmode = "backward"),
-          list(count = 5, label = "5A", step = "year", stepmode = "backward"),
-          list(step = "all", label = "Todo")
-        )
-      ),
-      
-      rangeslider = list(visible = FALSE) #Para quitar la barra
-    ),
-    
-    yaxis = list(
-      title         = "Variación (%)",
-      range         = c(-5, 25),
-      showgrid      = TRUE,
-      gridcolor     = "#EEEEEE",
-      ticksuffix    = "%",
-      zeroline      = TRUE,
-      zerolinecolor = "#AAAAAA",
-      zerolinewidth = 1.2
-    ),
-    
-    legend = list(
-      orientation = "h",
-      x = 0, y = -0.18,
-      bgcolor     = "rgba(255,255,255,0.9)",
-      bordercolor = "#DDDDDD",
-      borderwidth = 1,
-      font        = list(size = 11)
-    ),
-    
-    plot_bgcolor  = "white",
-    paper_bgcolor = "white",
-    hovermode     = "x unified",
-    
-    annotations = list(
-      list(
-        text = "Fuente: Instituto Nacional de Estadística (INE) - Bolivia",
-        x = 0, y = -0.27, xref = "paper", yref = "paper",
-        showarrow = FALSE,
-        font = list(size = 10, color = "#888888")
-      ),
-      list(
-        text = paste0(
-          "Último dato: ", format(ultimo$periodo, "%b %Y"),
-          " | 12m: <b>", round(ultimo$inf_12m, 2), "%</b>"
-        ),
-        x = 1, y = -0.27, xref = "paper", yref = "paper",
-        showarrow = FALSE, xanchor = "right",
-        font = list(size = 10, color = "#444444")
-      )
-    ),
-    
-    margin = list(t = 80, r = 50, b = 110, l = 60)
-  )
+meta_primer_anio    <- as.character(year(primer_dato))
+meta_ultimo_anio    <- as.character(year(ultimo_dato))
+meta_ultimo_fecha   <- format(ultimo$periodo, "%b %Y")
+meta_ultimo_12m     <- as.character(round(ultimo$inf_12m, 2))
+meta_fecha_asuncion <- format(FECHA_ASUNCION, "%Y-%m-%d")
 
 # ==============================================================================
-# 7. GUARDAR
+# 6. LEER TEMPLATE E INYECTAR DATOS
 # ==============================================================================
+# Leer el template con la codificación correcta
+template <- readLines(RUTA_TEMPLATE, encoding = "UTF-8", warn = FALSE)
+html      <- paste(template, collapse = "\n")
 
-saveWidget(fig, "Grafico_inflacion_Bolivia.html", selfcontained = TRUE)
-message("✓ Guardado: Grafico_inflacion_Bolivia.html")
+# Reemplazar cada placeholder por su valor real
+html <- gsub("{{DATOS_JSON}}",    datos_json,          html, fixed = TRUE)
+html <- gsub("{{PRIMER_ANIO}}",   meta_primer_anio,    html, fixed = TRUE)
+html <- gsub("{{ULTIMO_ANIO}}",   meta_ultimo_anio,    html, fixed = TRUE)
+html <- gsub("{{ULTIMO_FECHA}}",  meta_ultimo_fecha,   html, fixed = TRUE)
+html <- gsub("{{ULTIMO_12M}}",    meta_ultimo_12m,     html, fixed = TRUE)
+html <- gsub("{{FECHA_ASUNCION}}", meta_fecha_asuncion, html, fixed = TRUE)
+
+# ==============================================================================
+# 7. GUARDAR RESULTADO FINAL
+# ==============================================================================
+writeLines(html, RUTA_SALIDA, useBytes = FALSE)
+message("Listo. Guardado en: ", RUTA_SALIDA)
