@@ -5,16 +5,20 @@ Este proyecto presenta un dashboard interactivo para el análisis de la inflaci�
 El dashboard fue desarrollado utilizando R para el procesamiento y análisis de datos, y exportado como una aplicación HTML interactiva para su visualización en navegadores web.
 
 - Tecnologias usadas
+  
 R
 HTML
 CSS
 
 - Fuente de datos
+  
   Datos extraidos del INE y UDAPE
 
-...
+- Paquetes necesarios
+  
+```
 library(readxl)
 library(dplyr)
 library(lubridate)
 library(jsonlite)
-...
+```
